@@ -272,6 +272,74 @@ getDistributionName.vglm <- function(object) {
 
 
 ################################################################################
+# Generic function for extracting the fitted probabilities from a cumulative
+# link model; P(Y = j), j = 1, 2, ..., J.
+################################################################################
+
+#' #' @keywords internal
+#' getFittedValues <- function(object) {
+#'   UseMethod("getFittedValues")
+#' }
+
+
+################################################################################
+# Generic function for extracting the fitted probabilities from a cumulative
+# link model; P(Y = j), j = 1, 2, ..., J.
+################################################################################
+
+#' @keywords internal
+getFittedProbs <- function(object) {
+  UseMethod("getFittedProbs")
+}
+
+
+#' @keywords internal
+getFittedProbs.clm <- function(object) {
+  newdata <- stats::model.frame(object)
+  vars <- as.character(attr(object$terms, "variables"))
+  resp <- vars[1 + attr(object$terms, "response")]  # response name
+  newdata <- newdata[!names(newdata) %in% resp]
+  predict(object, newdata = newdata, type = "prob")$fit
+}
+
+
+#' @keywords internal
+getFittedProbs.glm <- function(object) {
+  cbind(object$fitted.values, 1 - object$fitted.values)
+}
+
+
+#' @keywords internal
+getFittedProbs.lrm <- function(object) {
+  predict(object, type = "fitted.ind")
+}
+
+
+#' @keywords internal
+getFittedProbs.orm <- function(object) {
+  predict(object, type = "fitted.ind")
+}
+
+
+#' @keywords internal
+getFittedProbs.polr <- function(object) {
+  object$fitted.values
+}
+
+
+#' @keywords internal
+getFittedProbs.vgam <- function(object) {
+  object@fitted.values
+}
+
+
+#' @keywords internal
+getFittedProbs.vglm <- function(object) {
+  object@fitted.values
+}
+
+
+################################################################################
 # Generic function for extracting the fitted mean response from a cumulative
 # link model
 ################################################################################
@@ -461,43 +529,80 @@ getResponseValues.vglm <- function(object, ...) {
 # and general models
 ################################################################################
 
-# For cumulative link models
-
 #' @keywords internal
-getSurrogateResiduals <- function(object, y, n.obs, mean.response, bounds) {
-  dist.name <- getDistributionName(object)
-  if (dist.name == "norm") {
-    .rtrunc(n.obs, spec = "norm", a = bounds[y], b = bounds[y + 1],
-            mean = mean.response, sd = 1) - mean.response
-  } else if (dist.name == "logis") {
-    .rtrunc(n.obs, spec = "logis", a = bounds[y], b = bounds[y + 1],
-            location = mean.response, scale = 1) - mean.response
-  } else if (dist.name == "cauchy") {
-    .rtrunc(n.obs, spec = "cauchy", a = bounds[y], b = bounds[y + 1],
-            location = mean.response, scale = 1) - mean.response
-  } else if (dist.name == "gumbel") {
-    .rtrunc(n.obs, spec = "gumbel", a = bounds[y], b = bounds[y + 1],
-            location = mean.response, scale = 1) - mean.response
-  } else if (dist.name == "Gumbel") {
-    .rtrunc(n.obs, spec = "Gumbel", a = bounds[y], b = bounds[y + 1],
-            location = mean.response, scale = 1) - mean.response
+getSurrogate <- function(object, method = NULL, jitter.scale = NULL, y = NULL,
+                         n.obs = NULL, mean.response = NULL, bounds = NULL) {
+
+  if (method == "latent") {
+
+    # Extract distribution name based on the specified link function
+    dist.name <- getDistributionName(object)
+
+    # Simulate surrogate response values from the corresponding (truncated)
+    # distribution
+    if (dist.name == "norm") {  # probit link
+      .rtrunc(n.obs, spec = "norm", a = bounds[y], b = bounds[y + 1],
+              mean = mean.response, sd = 1)
+    } else if (dist.name == "logis") {  # logit link
+      .rtrunc(n.obs, spec = "logis", a = bounds[y], b = bounds[y + 1],
+              location = mean.response, scale = 1)
+    } else if (dist.name == "cauchy") {  # cauchit link
+      .rtrunc(n.obs, spec = "cauchy", a = bounds[y], b = bounds[y + 1],
+              location = mean.response, scale = 1)
+    } else if (dist.name == "gumbel") {  # loglog link
+      .rtrunc(n.obs, spec = "gumbel", a = bounds[y], b = bounds[y + 1],
+              location = mean.response, scale = 1)
+    } else if (dist.name == "Gumbel") {  # cloglog link
+      .rtrunc(n.obs, spec = "Gumbel", a = bounds[y], b = bounds[y + 1],
+              location = mean.response, scale = 1)
+    } else {  # unsupported link
+      stop("Distribution not supported.")
+    }
+
   } else {
-    stop("Distribution not supported.")
+
+    # Simulate surrogate response values via jittering
+    if (jitter.scale == "response") {
+      runif(length(y), min = y, max = y + 1)
+    } else {
+      cprob <- t(apply(cbind(0, getFittedProbs(object)),
+                       MARGIN = 1, FUN = cumsum))
+      .min <- cprob[cbind(seq_along(y), y)]
+      .max <- cprob[cbind(seq_along(y), y + 1)]
+      runif(length(y), min = .min, max = .max)
+    }
   }
+
 }
 
 
-# For general models
-
 #' @keywords internal
-getJitteredResiduals <- function(object, jitter.scale, y) {
-  if (jitter.scale == "response") {
-    runif(length(y), min = y, max = y + 1) - (object$fitted + 0.5)
+getResiduals <- function(object, method, jitter.scale, y, n.obs, mean.response,
+                         bounds) {
+
+  # Generate surrogate response values
+  sur <- getSurrogate(object, method = method, jitter.scale = jitter.scale,
+                      y = y, n.obs = n.obs, mean.response = mean.response,
+                      bounds = bounds)
+
+  # Compute E(S|X)
+  esur <- if (method == "latent") {
+    mean.response
   } else {
-    .min <- pbinom(y - 1, size = 1, prob = object$fitted)  # F(y-1)
-    .max <- pbinom(y, size = 1, prob = object$fitted)  # F(y)
-    runif(length(y), min = .min, max = .max) - 0.5  # S|Y=y - E(S|X)
+    if (jitter.scale == "probability") {  # E[S|X]
+      0.5
+    } else {
+      prob <- getFittedProbs(object)
+      j <- seq_len(ncol(prob))  # j = 1, 2, ..., J
+      jmat <- matrix(rep(j, times = nrow(prob)), ncol = ncol(prob),
+                     byrow = TRUE)  # 1, 2, ..., J; 1, 2, ..., J; ...
+      rowSums((jmat + 0.5) * prob)  # sum((j + 0.5) * P(Y = j))
+    }
   }
+
+  # Return surrogate-based residuals
+  sur - esur  # S - E(S|X)
+
 }
 
 

@@ -4,12 +4,12 @@
 #'
 #' @param object An object of class \code{\link[ordinal]{clm}},
 #' \code{\link[stats]{glm}}, \code{\link[rms]{lrm}}, \code{\link[rms]{orm}},
-#' \code{\link[MASS]{polr}}, or \code{\link[VGAM]{vglm}}.
+#' \code{\link[MASS]{polr}}, \code{\link[VGAM]{vgam}} (jittering only), or
+#' \code{\link[VGAM]{vglm}}.
 #'
 #' @param method Character string specifying the type of surrogate to use; for
-#' details, see Liu and Zhang (2017). For cumulative link models, the latent
-#' variable method is used. For binary GLMs, the jittering approach is employed.
-#' (Currently ignored.)
+#' details, see Liu and Zhang (2017). Can be one of \code{"latent"} or
+#' \code{"jitter"}.
 #'
 #' @param jitter.scale Character string specifying the scale on which to perform
 #' the jittering. Should be one of \code{"probability"} or \code{"response"}.
@@ -55,16 +55,15 @@
 #' # Residuals for binary GLMs using the jittering method
 #' #
 #'
-#' # Simulate logistic regression data with quadratic trend
-#' set.seed(101)  # for reproducibility
-#' n <- 1000
-#' x <- runif(n, min = 1, max = 7)
-#' y <- rbinom(n, size = 1, prob = plogis(16 - 8 * x + 1 * x ^ 2))
-#' d <- data.frame("x" = x, "y" = as.factor(y))
+#' # Load the MASS package (for the polr function)
+#' library(MASS)
+#'
+#' # Simulated probit data with quadratic trend
+#' data(df1)
 #'
 #' # Fit logistic regression models (with and without quadratic trend)
-#' fit1 <- glm(y ~ x + I(x ^ 2), data = d, family = binomial)  # correct model
-#' fit2 <- glm(y ~ x, data = d, family = binomial)  # missing quadratic trend
+#' fit1 <- polr(y ~ x + I(x ^ 2), data = df1, method = "probit")
+#' fit2 <- polr(y ~ x, data = df1, method = "probit")
 #'
 #' # Construct residuals
 #' set.seed(102)  # for reproducibility
@@ -73,10 +72,10 @@
 #'
 #' # Residual-vs-covariate plots
 #' par(mfrow = c(1, 2))
-#' scatter.smooth(d$x, res1, lpars = list(lwd = 2, col = "red"),
+#' scatter.smooth(df1$x, res1, lpars = list(lwd = 2, col = "red"),
 #'                xlab = expression(x), ylab = "Surrogate residual",
 #'                main = "Correct model")
-#' scatter.smooth(d$x, res2, lpars = list(lwd = 2, col = "red"),
+#' scatter.smooth(df1$x, res2, lpars = list(lwd = 2, col = "red"),
 #'                xlab = expression(x), ylab = "Surrogate residual",
 #'                main = "Incorrect model")
 #'
@@ -176,90 +175,59 @@ resids.default <- function(object, method = c("latent", "jitter"),
   # Sanity check
   if (!inherits(object, c("clm", "glm", "lrm", "orm", "polr", "vglm"))) {
     stop(deparse(substitute(object)), " should be of class \"clm\", \"glm\", ",
-         "\"lrm\", \"orm\", \"polr\", or \"vglm\".")
+         "\"lrm\", \"orm\", \"polr\", \"vgam\", or \"vglm\".")
   }
 
-  # Extract number of observations, response values, and truncation bounds
-  y <- getResponseValues(object)
-  n.obs <- length(y)
-  bounds <- getBounds(object)
-  mr <- getMeanResponse(object)  # -f(x; beta) for cumulative link models
-
-  # Construct residuals
-  res <- getSurrogateResiduals(object, y = y, n.obs = n.obs, mean.response = mr,
-                               bounds = bounds)
-
-  # Multiple samples
-  if (nsim > 1L) {  # bootstrap
-    boot.res <- boot.index <- matrix(nrow = n.obs, ncol = nsim)
-    for(i in seq_len(nsim)) {
-      boot.index[, i] <- sample(n.obs, replace = TRUE)
-      mr <- getMeanResponse(object)[boot.index[, i]]
-      boot.res[, i] <-
-        getSurrogateResiduals(object, y = y[boot.index[, i]], n.obs = n.obs,
-                              mean.response = mr, bounds = bounds)
-    }
-    attr(res, "boot.reps") <- boot.res
-    attr(res, "boot.id") <- boot.index
-  }
-
-  # Return residuals
-  class(res) <- c("numeric", "resid")
-  res
-
-}
-
-
-#' @rdname resids
-#' @export
-resids.lrm <- function(object, method = c("latent", "jitter"),
-                       jitter.scale = c("probability", "response"), nsim = 1L,
-                       ...) {
-  resids.default(object, nsim = nsim, ...)
-}
-
-
-#' @rdname resids
-#' @export
-resids.glm <- function(object, jitter.scale = c("probability", "response"),
-                       nsim = 1L, ...) {
-
-  # Print warning message
-  warning("Using sure with \"glm\" objects is still experimental. Use with ",
-          "caution.")
-
-  # Check for binomial family
-  if (object$family$family != "binomial") {
-    stop("Jittering is only available for \"glm\" objects with the binomial ",
-         "family.")
-  }
-
-  # What type of residuals?
+  # Match arguments
+  method <- match.arg(method)
   jitter.scale <- match.arg(jitter.scale)
 
+  # Another sanity check
+  if (method == "latent" && inherits(object, "vgam")) {
+    stop("The latent method is not currently available for \"vgam\" fits.")
+  }
+
+  # Sanity checks
+  if (method == "latent" && inherits(object, "glm") &&
+      !inherits(object, "lrm")) {
+    stop("The latent method is not available for GLMs.")
+  }
+
   # Extract response values and number of observations
-  # FIXME: What about missing values?
-  # FIXME: What about matrix response, etc.?
-  y <- getResponseValues(object)  # should be in {0, 1}
+  y <- getResponseValues(object)
   n.obs <- length(y)
 
-  # Construct residuals
-  res <- getJitteredResiduals(object, jitter.scale = jitter.scale, y = y)
+  # Extract truncation bounds and mean response
+  bounds <- if (method == "latent") getBounds(object) else NULL
+  mr <- if (method == "latent") getMeanResponse(object) else NULL
 
-  # Assign attribute to help in plotting
-  attr(res, "jitter.scale") <- jitter.scale
+  # Construct residuals
+  res <- getResiduals(object, method = method, jitter.scale = jitter.scale,
+                      y = y, n.obs = n.obs, mean.response = mr,
+                      bounds = bounds)
 
   # Multiple samples
   if (nsim > 1L) {  # bootstrap
     boot.res <- boot.index <- matrix(nrow = n.obs, ncol = nsim)
     for(i in seq_len(nsim)) {
       boot.index[, i] <- sample(n.obs, replace = TRUE)
-      boot.res[, i] <-
-        getJitteredResiduals(object, jitter.scale = jitter.scale,
-                             y = y[boot.index[, i]])
+      mr <- if (method == "latent") {
+        getMeanResponse(object)[boot.index[, i]]
+      } else {
+        NULL
+      }
+      boot.res[, i] <- getResiduals(object, method = method,
+                                    jitter.scale = jitter.scale,
+                                    y = y[boot.index[, i]], n.obs = n.obs,
+                                    mean.response = mr, bounds = bounds)
     }
     attr(res, "boot.reps") <- boot.res
     attr(res, "boot.id") <- boot.index
+  }
+
+  # Add jitter.scale attribute (for autoplot)
+  if (method == "jitter") {
+    attr(res, "jitter.scale") <- jitter.scale
   }
 
   # Return residuals

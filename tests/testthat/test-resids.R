@@ -39,31 +39,23 @@ test_that("resids work for \"glm\" objects", {
   data(df1)
 
   # Fit cumulative link model
-  fit <- glm(y ~ x + I(x ^ 2), data = df1, family = binomial)
+  d <- df1[df1$y %in% 1:2, ]
+  fit <- glm(y ~ x + I(x ^ 2), data = d, family = binomial)
 
   # Compute residuals
-  res1 <- resids(fit)
-  res2 <- resids(fit, nsim = 10)
-  res3 <- resids(fit, jitter.scale = "probability")
-  res4 <- resids(fit, nsim = 10, jitter.scale = "probability")
+  res1 <- resids(fit, method = "jitter")
+  res2 <- resids(fit, method = "jitter", nsim = 10)
 
   # Expectations
-  expect_equal(length(res1), nrow(df1))
-  expect_equal(length(res2), nrow(df1))
-  expect_equal(length(res3), nrow(df1))
-  expect_equal(length(res4), nrow(df1))
+  expect_error(resids(fit))
+  expect_equal(length(res1), nrow(d))
+  expect_equal(length(res2), nrow(d))
   expect_null(attr(res1, "boot.reps"))
   expect_null(attr(res1, "boot.id"))
-  expect_null(attr(res3, "boot.reps"))
-  expect_null(attr(res3, "boot.id"))
   expect_is(attr(res2, "boot.reps"), "matrix")
   expect_is(attr(res2, "boot.id"), "matrix")
-  expect_is(attr(res4, "boot.reps"), "matrix")
-  expect_is(attr(res4, "boot.id"), "matrix")
-  expect_equal(dim(attr(res2, "boot.reps")), c(nrow(df1), 10))
-  expect_equal(dim(attr(res2, "boot.id")), c(nrow(df1), 10))
-  expect_equal(dim(attr(res4, "boot.reps")), c(nrow(df1), 10))
-  expect_equal(dim(attr(res4, "boot.id")), c(nrow(df1), 10))
+  expect_equal(dim(attr(res2, "boot.reps")), c(nrow(d), 10))
+  expect_equal(dim(attr(res2, "boot.id")), c(nrow(d), 10))
 
 })
 

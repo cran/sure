@@ -3,32 +3,24 @@
 \name{resids}
 \alias{resids}
 \alias{resids.default}
-\alias{resids.lrm}
-\alias{resids.glm}
 \title{Surrogate Residuals}
 \usage{
 resids(object, ...)
 
 \method{resids}{default}(object, method = c("latent", "jitter"),
   jitter.scale = c("probability", "response"), nsim = 1L, ...)
-
-\method{resids}{lrm}(object, method = c("latent", "jitter"),
-  jitter.scale = c("probability", "response"), nsim = 1L, ...)
-
-\method{resids}{glm}(object, jitter.scale = c("probability", "response"),
-  nsim = 1L, ...)
 }
 \arguments{
 \item{object}{An object of class \code{\link[ordinal]{clm}},
 \code{\link[stats]{glm}}, \code{\link[rms]{lrm}}, \code{\link[rms]{orm}},
-\code{\link[MASS]{polr}}, or \code{\link[VGAM]{vglm}}.}
+\code{\link[MASS]{polr}}, \code{\link[VGAM]{vgam}} (jittering only), or
+\code{\link[VGAM]{vglm}}.}
 
 \item{...}{Additional optional arguments. (Currently ignored.)}
 
 \item{method}{Character string specifying the type of surrogate to use; for
-details, see Liu and Zhang (2017). For cumulative link models, the latent
-variable method is used. For binary GLMs, the jittering approach is employed.
-(Currently ignored.)}
+details, see Liu and Zhang (2017). Can be one of \code{"latent"} or
+\code{"jitter"}.}
 
 \item{jitter.scale}{Character string specifying the scale on which to perform
 the jittering. Should be one of \code{"probability"} or \code{"response"}.
@@ -65,16 +57,15 @@ The internal functions used for sampling from truncated distributions when
 # Residuals for binary GLMs using the jittering method
 #
 
-# Simulate logistic regression data with quadratic trend
-set.seed(101)  # for reproducibility
-n <- 1000
-x <- runif(n, min = 1, max = 7)
-y <- rbinom(n, size = 1, prob = plogis(16 - 8 * x + 1 * x ^ 2))
-d <- data.frame("x" = x, "y" = as.factor(y))
+# Load the MASS package (for the polr function)
+library(MASS)
+
+# Simulated probit data with quadratic trend
+data(df1)
 
 # Fit logistic regression models (with and without quadratic trend)
-fit1 <- glm(y ~ x + I(x ^ 2), data = d, family = binomial)  # correct model
-fit2 <- glm(y ~ x, data = d, family = binomial)  # missing quadratic trend
+fit1 <- polr(y ~ x + I(x ^ 2), data = df1, method = "probit")
+fit2 <- polr(y ~ x, data = df1, method = "probit")
 
 # Construct residuals
 set.seed(102)  # for reproducibility
@@ -83,10 +74,10 @@ res2 <- resids(fit2)
 
 # Residual-vs-covariate plots
 par(mfrow = c(1, 2))
-scatter.smooth(d$x, res1, lpars = list(lwd = 2, col = "red"),
+scatter.smooth(df1$x, res1, lpars = list(lwd = 2, col = "red"),
                xlab = expression(x), ylab = "Surrogate residual",
                main = "Correct model")
-scatter.smooth(d$x, res2, lpars = list(lwd = 2, col = "red"),
+scatter.smooth(df1$x, res2, lpars = list(lwd = 2, col = "red"),
                xlab = expression(x), ylab = "Surrogate residual",
                main = "Incorrect model")
 

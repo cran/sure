@@ -9,8 +9,8 @@
 #'
 #' @format A data frame with 2000 rows and 2 variables.
 #' \itemize{
-#'   \item \code{x} The predictor variable.
 #'   \item \code{y} The response variable; an ordered factor.
+#'   \item \code{x} The predictor variable.
 #' }
 #'
 #' @references
@@ -39,8 +39,8 @@ NULL
 #'
 #' @format A data frame with 2000 rows and 2 variables.
 #' \itemize{
-#'   \item \code{x} The predictor variable.
 #'   \item \code{y} The response variable; an ordered factor.
+#'   \item \code{x} The predictor variable.
 #' }
 #'
 #' @references
@@ -69,8 +69,8 @@ NULL
 #'
 #' @format A data frame with 2000 rows and 2 variables.
 #' \itemize{
-#'   \item \code{x} The predictor variable.
 #'   \item \code{y} The response variable; an ordered factor.
+#'   \item \code{x} The predictor variable.
 #' }
 #'
 #' @references
@@ -85,4 +85,60 @@ NULL
 #'
 #' @examples
 #' head(df3)
+NULL
+
+
+#' Simulated Proportionality Data
+#'
+#' Data simulated from two separate ordered probit models with different
+#' coefficients. The data are described in Example 5 of Liu and Zhang (2017).
+#'
+#' @docType data
+#'
+#' @keywords datasets
+#'
+#' @format A data frame with 2000 rows and 2 variables.
+#' \itemize{
+#'   \item \code{y} The response variable; an ordered factor.
+#'   \item \code{x} The predictor variable.
+#' }
+#'
+#' @references
+#' Liu, Dungang and Zhang, Heping. Residuals and Diagnostics for Ordinal
+#' Regression Models: A Surrogate Approach.
+#' \emph{Journal of the American Statistical Association} (accepted).
+#'
+#' @name df4
+#'
+#' @usage
+#' data(df4)
+#'
+#' @examples
+#' head(df4)
+NULL
+
+
+#' Simulated Interaction Data
+#'
+#' Data simulated from an ordered probit model with an interaction term.
+#'
+#' @docType data
+#'
+#' @keywords datasets
+#'
+#' @format A data frame with 2000 rows and 3 variables.
+#' \itemize{
+#'   \item \code{y} The response variable; an ordered factor.
+#'   \item \code{x1} A continuous predictor.
+#'   \item \code{x2} A factor with two levels: \code{Control} and
+#'   \code{Treatment}.
+#' }
+#'
+#' @name df5
+#'
+#' @usage
+#' data(df5)
+#'
+#' @examples
+#' head(df5)
 NULL
